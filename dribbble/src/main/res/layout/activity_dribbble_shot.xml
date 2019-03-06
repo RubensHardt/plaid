@@ -28,8 +28,8 @@
             type="io.plaidapp.dribbble.ui.shot.ShotViewModel" />
 
         <variable
-            name="shotUiModel"
-            type="io.plaidapp.core.dribbble.data.api.model.Shot" />
+            name="uiModel"
+            type="io.plaidapp.dribbble.ui.shot.ShotUiModel" />
 
     </data>
 
@@ -133,7 +133,7 @@
                     android:paddingStart="@dimen/padding_normal"
                     android:paddingTop="@dimen/padding_normal"
                     android:textAppearance="@style/TextAppearance.DribbbleShotTitle"
-                    android:text="@{shotUiModel.title}" />
+                    android:text="@{uiModel.title}" />
 
                 <io.plaidapp.core.ui.widget.BaselineGridTextView
                     android:id="@+id/shot_description"

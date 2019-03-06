@@ -23,7 +23,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.Drawable
-import android.net.Uri
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.util.TypedValue
@@ -32,7 +31,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.app.ShareCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.doOnPreDraw
+import androidx.lifecycle.Observer
 import androidx.palette.graphics.Palette
 import com.bumptech.glide.Priority
 import com.bumptech.glide.load.DataSource
@@ -45,7 +46,6 @@ import io.plaidapp.core.ui.widget.ElasticDragDismissFrameLayout
 import io.plaidapp.core.util.Activities
 import io.plaidapp.core.util.AnimUtils.getFastOutSlowInInterpolator
 import io.plaidapp.core.util.ColorUtils
-import io.plaidapp.core.util.HtmlParser
 import io.plaidapp.core.util.HtmlUtils
 import io.plaidapp.core.util.ViewUtils
 import io.plaidapp.core.util.customtabs.CustomTabActivityHelper
@@ -128,14 +128,17 @@ class ShotActivity : AppCompatActivity() {
 
         viewModel.openLink.observe(this, EventObserver { openLink(it) })
         viewModel.shareShot.observe(this, EventObserver { shareShot(it) })
+
         binding.viewModel = viewModel
-        binding.shotUiModel = viewModel.shot // TODO this should be a Live Data of a UI Model
+        viewModel.shotUiModel.observe(this, Observer {
+            binding.uiModel = it
+            bindShot()
+        })
 
         binding.bodyScroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
             binding.shot.offset = -scrollY
         }
         binding.back.setOnClickListener { setResultAndFinish() }
-        bindShot()
     }
 
     override fun onResume() {
@@ -158,17 +161,16 @@ class ShotActivity : AppCompatActivity() {
     }
 
     override fun onProvideAssistContent(outContent: AssistContent) {
-        outContent.webUri = Uri.parse(viewModel.shot.url)
+        outContent.webUri = viewModel.getAssistWebUrl().toUri()
     }
 
     private fun bindShot() {
-        val shot = viewModel.shot
         val res = resources
 
         // load the main image
-        val (width, height) = shot.images.bestSize()
+        val (width, height) = viewModel.shotUiModel.value!!.imageSize
         GlideApp.with(this)
-            .load(shot.images.best())
+            .load(viewModel.shotUiModel.value!!.imageUrl)
             .listener(shotLoadListener)
             .diskCacheStrategy(DiskCacheStrategy.DATA)
             .priority(Priority.IMMEDIATE)
@@ -181,31 +183,27 @@ class ShotActivity : AppCompatActivity() {
             startPostponedEnterTransition()
         }
 
-        if (shot.description.isNotEmpty()) {
-            // TODO move this to a use case
-            val descText = HtmlParser().parse(
-                shot.description,
-                ContextCompat.getColorStateList(this, R.color.dribbble_links)!!,
-                ContextCompat.getColor(this, io.plaidapp.R.color.dribbble_link_highlight)
-            )
-            HtmlUtils.setTextWithNiceLinks(binding.shotDescription, descText)
+        if (viewModel.shotUiModel.value!!.formattedDescription.isNotEmpty()) {
+            HtmlUtils.setTextWithNiceLinks(binding.shotDescription, viewModel.shotUiModel.value!!.formattedDescription)
         } else {
             binding.shotDescription.visibility = GONE
         }
-        val nf = NumberFormat.getInstance()
-        binding.shotLikeCount.text = res.getQuantityString(
-            R.plurals.likes,
-            shot.likesCount.toInt(),
-            nf.format(shot.likesCount)
-        )
+//        val nf = NumberFormat.getInstance()
+//        binding.shotLikeCount.text = res.getQuantityString(
+//            R.plurals.likes,
+//            viewModel.shotUiModel.value!!.likesCount.toInt(),
+//            nf.format(shot.likesCount)
+//        )
+        binding.shotLikeCount.text = viewModel.shotUiModel.value!!.formattedLikesCount
         binding.shotLikeCount.setOnClickListener {
             (binding.shotLikeCount.compoundDrawables[1] as AnimatedVectorDrawable).start()
         }
-        binding.shotViewCount.text = res.getQuantityString(
-            R.plurals.views,
-            shot.viewsCount.toInt(),
-            nf.format(shot.viewsCount)
-        )
+//        binding.shotViewCount.text = res.getQuantityString(
+//            R.plurals.views,
+//            shot.viewsCount.toInt(),
+//            nf.format(shot.viewsCount)
+//        )
+        binding.shotViewCount.text = viewModel.shotUiModel.value!!.formattedViewsCount
         binding.shotViewCount.setOnClickListener {
             (binding.shotViewCount.compoundDrawables[1] as? AnimatedVectorDrawable)?.start()
         }
@@ -213,17 +211,17 @@ class ShotActivity : AppCompatActivity() {
             (binding.shotShareAction.compoundDrawables[1] as AnimatedVectorDrawable).start()
             viewModel.shareShotRequested()
         }
-        binding.playerName.text = shot.user.name.toLowerCase()
+        binding.playerName.text = viewModel.shotUiModel.value!!.userName
         GlideApp.with(this)
-            .load(shot.user.highQualityAvatarUrl)
+            .load(viewModel.shotUiModel.value!!.userAvatarUrl)
             .circleCrop()
             .placeholder(io.plaidapp.R.drawable.avatar_placeholder)
             .override(largeAvatarSize, largeAvatarSize)
             .transition(DrawableTransitionOptions.withCrossFade())
             .into(binding.playerAvatar)
-        if (shot.createdAt != null) {
+        if (viewModel.shotUiModel.value!!.createdAt != null) {
             binding.shotTimeAgo.text = DateUtils.getRelativeTimeSpanString(
-                shot.createdAt!!.time,
+                viewModel.shotUiModel.value!!.createdAt!!.time,
                 System.currentTimeMillis(),
                 DateUtils.SECOND_IN_MILLIS
             ).toString().toLowerCase()
@@ -305,7 +303,7 @@ class ShotActivity : AppCompatActivity() {
 
     internal fun setResultAndFinish() {
         val resultData = Intent().apply {
-            putExtra(Activities.Dribbble.Shot.RESULT_EXTRA_SHOT_ID, viewModel.shot.id)
+            putExtra(Activities.Dribbble.Shot.RESULT_EXTRA_SHOT_ID, viewModel.shotUiModel.value!!.id)
         }
         setResult(Activity.RESULT_OK, resultData)
         finishAfterTransition()
