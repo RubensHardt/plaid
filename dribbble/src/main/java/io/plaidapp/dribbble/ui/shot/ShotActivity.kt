@@ -21,43 +21,33 @@ import android.app.Activity
 import android.app.assist.AssistContent
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
-import android.text.format.DateUtils
 import android.util.TypedValue
-import android.view.View.GONE
 import androidx.appcompat.app.AppCompatActivity
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.app.ShareCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
-import androidx.core.view.doOnPreDraw
 import androidx.lifecycle.Observer
 import androidx.palette.graphics.Palette
-import com.bumptech.glide.Priority
 import com.bumptech.glide.load.DataSource
-import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.engine.GlideException
-import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import io.plaidapp.core.ui.widget.ElasticDragDismissFrameLayout
 import io.plaidapp.core.util.Activities
 import io.plaidapp.core.util.AnimUtils.getFastOutSlowInInterpolator
 import io.plaidapp.core.util.ColorUtils
-import io.plaidapp.core.util.HtmlUtils
 import io.plaidapp.core.util.ViewUtils
 import io.plaidapp.core.util.customtabs.CustomTabActivityHelper
 import io.plaidapp.core.util.delegates.contentView
 import io.plaidapp.core.util.event.EventObserver
-import io.plaidapp.core.util.glide.GlideApp
 import io.plaidapp.core.util.glide.getBitmap
 import io.plaidapp.dribbble.R
 import io.plaidapp.dribbble.dagger.inject
 import io.plaidapp.dribbble.databinding.ActivityDribbbleShotBinding
 import io.plaidapp.dribbble.domain.ShareShotInfo
-import java.text.NumberFormat
 import javax.inject.Inject
 
 /**
@@ -65,8 +55,10 @@ import javax.inject.Inject
  */
 class ShotActivity : AppCompatActivity() {
 
-    @Inject internal lateinit var viewModel: ShotViewModel
-    @Inject internal lateinit var chromeFader: ElasticDragDismissFrameLayout.SystemChromeFader
+    @Inject
+    internal lateinit var viewModel: ShotViewModel
+    @Inject
+    internal lateinit var chromeFader: ElasticDragDismissFrameLayout.SystemChromeFader
 
     private val binding by contentView<ShotActivity, ActivityDribbbleShotBinding>(
         R.layout.activity_dribbble_shot
@@ -128,13 +120,12 @@ class ShotActivity : AppCompatActivity() {
 
         viewModel.openLink.observe(this, EventObserver { openLink(it) })
         viewModel.shareShot.observe(this, EventObserver { shareShot(it) })
-
-        binding.viewModel = viewModel
         viewModel.shotUiModel.observe(this, Observer {
             binding.uiModel = it
-            bindShot()
         })
 
+        binding.viewModel = viewModel
+        binding.shotLoadListener = shotLoadListener
         binding.bodyScroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
             binding.shot.offset = -scrollY
         }
@@ -162,70 +153,6 @@ class ShotActivity : AppCompatActivity() {
 
     override fun onProvideAssistContent(outContent: AssistContent) {
         outContent.webUri = viewModel.getAssistWebUrl().toUri()
-    }
-
-    private fun bindShot() {
-        val res = resources
-
-        // load the main image
-        val (width, height) = viewModel.shotUiModel.value!!.imageSize
-        GlideApp.with(this)
-            .load(viewModel.shotUiModel.value!!.imageUrl)
-            .listener(shotLoadListener)
-            .diskCacheStrategy(DiskCacheStrategy.DATA)
-            .priority(Priority.IMMEDIATE)
-            .override(width, height)
-            .transition(DrawableTransitionOptions.withCrossFade())
-            .into(binding.shot)
-
-        postponeEnterTransition()
-        binding.shot.doOnPreDraw {
-            startPostponedEnterTransition()
-        }
-
-        if (viewModel.shotUiModel.value!!.formattedDescription.isNotEmpty()) {
-            HtmlUtils.setTextWithNiceLinks(binding.shotDescription, viewModel.shotUiModel.value!!.formattedDescription)
-        } else {
-            binding.shotDescription.visibility = GONE
-        }
-//        val nf = NumberFormat.getInstance()
-//        binding.shotLikeCount.text = res.getQuantityString(
-//            R.plurals.likes,
-//            viewModel.shotUiModel.value!!.likesCount.toInt(),
-//            nf.format(shot.likesCount)
-//        )
-        binding.shotLikeCount.text = viewModel.shotUiModel.value!!.formattedLikesCount
-        binding.shotLikeCount.setOnClickListener {
-            (binding.shotLikeCount.compoundDrawables[1] as AnimatedVectorDrawable).start()
-        }
-//        binding.shotViewCount.text = res.getQuantityString(
-//            R.plurals.views,
-//            shot.viewsCount.toInt(),
-//            nf.format(shot.viewsCount)
-//        )
-        binding.shotViewCount.text = viewModel.shotUiModel.value!!.formattedViewsCount
-        binding.shotViewCount.setOnClickListener {
-            (binding.shotViewCount.compoundDrawables[1] as? AnimatedVectorDrawable)?.start()
-        }
-        binding.shotShareAction.setOnClickListener {
-            (binding.shotShareAction.compoundDrawables[1] as AnimatedVectorDrawable).start()
-            viewModel.shareShotRequested()
-        }
-        binding.playerName.text = viewModel.shotUiModel.value!!.userName
-        GlideApp.with(this)
-            .load(viewModel.shotUiModel.value!!.userAvatarUrl)
-            .circleCrop()
-            .placeholder(io.plaidapp.R.drawable.avatar_placeholder)
-            .override(largeAvatarSize, largeAvatarSize)
-            .transition(DrawableTransitionOptions.withCrossFade())
-            .into(binding.playerAvatar)
-        if (viewModel.shotUiModel.value!!.createdAt != null) {
-            binding.shotTimeAgo.text = DateUtils.getRelativeTimeSpanString(
-                viewModel.shotUiModel.value!!.createdAt!!.time,
-                System.currentTimeMillis(),
-                DateUtils.SECOND_IN_MILLIS
-            ).toString().toLowerCase()
-        }
     }
 
     private fun openLink(url: String) {
@@ -303,7 +230,7 @@ class ShotActivity : AppCompatActivity() {
 
     internal fun setResultAndFinish() {
         val resultData = Intent().apply {
-            putExtra(Activities.Dribbble.Shot.RESULT_EXTRA_SHOT_ID, viewModel.shotUiModel.value!!.id)
+            putExtra(Activities.Dribbble.Shot.RESULT_EXTRA_SHOT_ID, viewModel.getShotId())
         }
         setResult(Activity.RESULT_OK, resultData)
         finishAfterTransition()

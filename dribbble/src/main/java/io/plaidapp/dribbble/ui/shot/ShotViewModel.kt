@@ -84,6 +84,10 @@ class ShotViewModel @Inject constructor(
         return shotUiModel.value?.url.orEmpty()
     }
 
+    fun getShotId(): Long {
+        return shotUiModel.value?.id ?: -1L
+    }
+
     override fun onCleared() {
         super.onCleared()
         shareShotJob?.cancel()

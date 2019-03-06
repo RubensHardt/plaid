@@ -14,12 +14,16 @@ data class ShotUiModel(
     val formattedDescription: CharSequence,
     val imageUrl: String,
     val imageSize: Images.ImageSize,
+    val likesCount: Int,
     val formattedLikesCount: String,
+    val viewsCount: Int,
     val formattedViewsCount: String,
     val createdAt: Date?,
     val userName: String,
     val userAvatarUrl: String
-)
+) {
+    val shouldHideDescription = formattedDescription.isEmpty()
+}
 
 /**
  * A sync conversion which skips long running work in order to publish a result asap. For a more
@@ -33,7 +37,9 @@ fun Shot.toShotUiModel(): ShotUiModel {
         formattedDescription = "",
         imageUrl = images.best(),
         imageSize = images.bestSize(),
+        likesCount = likesCount,
         formattedLikesCount = likesCount.toString(),
+        viewsCount = viewsCount,
         formattedViewsCount = viewsCount.toString(),
         createdAt = createdAt,
         userName = user.name.toLowerCase(),
